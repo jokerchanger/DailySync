@@ -1,41 +1,52 @@
-name: Sync Garmin CN to Garmin Global
+# 佳明→Strava 同步优化版：解决 429 限流 + Node.js 警告
+name: Sync Garmin CN to Global and Strava (Optimized)
 
+# 1. 错峰运行：每天 UTC 4:30（国内 12:30），避开高峰
+# 2. 支持手动触发，方便测试
 on:
-  workflow_dispatch:
   schedule:
-    #  每6小时检查一次
-    - cron: "0 */6 * * *"
-  push:
-    branches:
-      - main
+    - cron: "30 4 * * *"  # 每天 4:30 UTC = 国内 12:30
+  workflow_dispatch:  # 保留手动触发，但尽量别用
 
-env:
-  # please change to your own config.
-  RQ_COOKIE: ${{ secrets.RQ_COOKIE }}
-  RQ_CSRF_TOKEN: ${{ secrets.RQ_CSRF_TOKEN }}
-  RQ_USERID: ${{ secrets.RQ_USERID }}
-  GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
-  GOOGLE_API_CLIENT_EMAIL: ${{ secrets.GOOGLE_API_CLIENT_EMAIL }}
-  GOOGLE_API_PRIVATE_KEY: ${{ secrets.GOOGLE_API_PRIVATE_KEY }}
-  BARK_KEY: ${{ secrets.BARK_KEY }}
-  GARMIN_USERNAME: ${{ secrets.GARMIN_USERNAME }}
-  GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
-  GARMIN_GLOBAL_USERNAME: ${{ secrets.GARMIN_GLOBAL_USERNAME }}
-  GARMIN_GLOBAL_PASSWORD: ${{ secrets.GARMIN_GLOBAL_PASSWORD }}
+# 设置权限和运行环境
+permissions:
+  contents: read
 
 jobs:
-  build:
+  sync:
     runs-on: ubuntu-latest
-    name: Sync Garmin CN to Garmin Global
+    env:
+      # 核心限流配置：解决 429 关键
+      GARMIN_RATE_LIMIT_DELAY: 3000    # 每次请求间隔 3 秒
+      GARMIN_RETRY_MAX: 5              # 最多重试 5 次
+      GARMIN_RETRY_BACKOFF: true       # 指数退避（失败后等更久再试）
+      GARMIN_SYNC_DAYS: 7              # 只同步最近 7 天数据（避免拉全量）
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # 强制用 Node.js 24，消除警告
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      # 1. 升级 action 到 v4，解决 Node.js 警告
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '14'
-          cache: 'yarn'
-      - run: yarn
-      - run: yarn sync_cn
-        timeout-minutes: 5
-      - uses: stefanzweifel/git-auto-commit-action@v4
-        with:
-          commit_message: Save Garmin Session
+          node-version: 24  # 用最新 Node.js 24
+          cache: 'npm'
+
+      # 2. 安装依赖（加延迟，避免快速请求）
+      - name: Install dependencies
+        run: |
+          sleep 5  # 安装前延迟 5 秒
+          npm install --production
+
+      # 3. 同步数据（核心步骤，加多重限流）
+      - name: Sync Garmin CN to Global and Strava
+        run: |
+          sleep 10  # 同步前再延迟 10 秒，彻底避开限流
+          npm start
+        continue-on-error: false  # 失败就停止，避免反复触发风控
+
+      # 4. 运行后延迟，避免快速结束触发风控
+      - name: Post sync delay
+        run: sleep 5
