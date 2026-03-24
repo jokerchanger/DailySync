@@ -1,48 +1,36 @@
-# 佳明→Strava 同步优化版：解决 429 限流 + Node.js 警告 + 编译问题
-name: Sync Garmin CN to Global and Strava (Optimized)
+name: Sync Garmin CN to Garmin Global
 
 on:
-  schedule:
-    - cron: "30 4 * * *"  # 每天 4:30 UTC = 国内 12:30
   workflow_dispatch:
-
-permissions:
-  contents: read
+  schedule:
+    - cron: "0 */6 * * *"
+  push:
+    branches:
+      - main
 
 jobs:
-  sync:
+  build:
     runs-on: ubuntu-latest
+    name: Sync Garmin CN to Garmin Global
     env:
-      GARMIN_RATE_LIMIT_DELAY: 3000
-      GARMIN_RETRY_MAX: 5
-      GARMIN_RETRY_BACKOFF: true
-      GARMIN_SYNC_DAYS: 7
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      GARMIN_USERNAME: ${{ secrets.GARMIN_USERNAME }}
+      GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+      GARMIN_GLOBAL_USERNAME: ${{ secrets.GARMIN_GLOBAL_USERNAME }}
+      GARMIN_GLOBAL_PASSWORD: ${{ secrets.GARMIN_GLOBAL_PASSWORD }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 24
-          cache: 'npm'
+          node-version: 20
 
       - name: Install dependencies
-        run: |
-          sleep 5
-          npm install --production
+        run: npm install
 
-      # ✅ 新增：编译 TypeScript 代码
-      - name: Build TypeScript
-        run: npx tsc  # 或 npm run build（如果 package.json 里有 build 脚本）
+      - name: Sync CN → Global
+        run: npx ts-node src/sync_garmin_cn_to_global.ts
 
-      - name: Sync Garmin CN to Global and Strava
-        run: |
-          sleep 10
-          npm run start2
-        continue-on-error: false
-
-      - name: Post sync delay
-        run: sleep 5
+      - name: Save session
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Save Garmin Session
