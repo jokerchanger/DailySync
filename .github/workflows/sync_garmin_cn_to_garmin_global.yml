@@ -3,7 +3,8 @@ name: Sync Garmin CN to Garmin Global
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"
+    # 改为每天 UTC 4:00（国内 12:00），错峰避限流
+    - cron: "0 4 * * *"
   push:
     branches:
       - main
@@ -17,6 +18,10 @@ jobs:
       GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
       GARMIN_GLOBAL_USERNAME: ${{ secrets.GARMIN_GLOBAL_USERNAME }}
       GARMIN_GLOBAL_PASSWORD: ${{ secrets.GARMIN_GLOBAL_PASSWORD }}
+      # 限流优化配置
+      GARMIN_RATE_LIMIT_DELAY: 5000    # 每次请求间隔 5 秒
+      GARMIN_RETRY_MAX: 5              # 最多重试 5 次
+      GARMIN_RETRY_BACKOFF: true       # 指数退避（1s→2s→4s...）
 
     steps:
       - uses: actions/checkout@v4
@@ -27,9 +32,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # ✅ 同步前延迟 + 带重试运行脚本
       - name: Sync CN → Global
-        run: npx ts-node src/sync_garmin_cn_to_global.ts
+        run: |
+          sleep 15  # 同步前先等 15 秒，避高峰
+          npx ts-node src/sync_garmin_cn_to_global.ts
+        timeout-minutes: 15  # 延长超时时间，给重试留余地
 
+      - name: Save session
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Save Garmin Session
       - name: Save session
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
