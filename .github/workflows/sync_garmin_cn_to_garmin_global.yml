@@ -44,7 +44,7 @@ jobs:
       - name: Sync Garmin CN to Global and Strava
         run: |
           sleep 10  # 同步前再延迟 10 秒，彻底避开限流
-          npm start
+          npm run start2    # <-- 已修复！
         continue-on-error: false  # 失败就停止，避免反复触发风控
 
       # 4. 运行后延迟，避免快速结束触发风控
