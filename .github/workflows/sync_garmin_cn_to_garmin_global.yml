@@ -3,8 +3,8 @@ name: Sync Garmin CN to Garmin Global
 on:
   workflow_dispatch:
   schedule:
-    # 改为每天 UTC 4:00（国内 12:00），错峰避限流
-    - cron: "0 4 * * *"
+    # 每 3 小时同步一次（UTC 时间 → 国内 +8 小时）
+    - cron: "0 */3 * * *"
   push:
     branches:
       - main
@@ -39,10 +39,6 @@ jobs:
           npx ts-node src/sync_garmin_cn_to_global.ts
         timeout-minutes: 15  # 延长超时时间，给重试留余地
 
-      - name: Save session
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: Save Garmin Session
       - name: Save session
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
